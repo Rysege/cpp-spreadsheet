@@ -28,7 +28,6 @@ private:
     std::unique_ptr<Impl> impl_;
     SheetInterface& sheet_;
     std::unordered_set<Cell*> exploited_; // содержит ячейки, которые ссылаются на ячейку
-    //std::unordered_set<Cell*> depended_;  // содержит ячейки, на которые ссылается ячейка
 
     // очищает кэш у себя и у ячеек, которые ссылаются на эту ячейку
     void ClearCache();
