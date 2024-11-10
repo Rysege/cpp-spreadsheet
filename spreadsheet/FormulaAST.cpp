@@ -142,19 +142,20 @@ public:
     }
 
     double Evaluate(const Getter& args) const override {
-        double value{};
+        double value = lhs_->Evaluate(args);
+        double rhs = rhs_->Evaluate(args);
         switch (type_) {
         case BinaryOpExpr::Add:
-            value = lhs_->Evaluate(args) + rhs_->Evaluate(args);
+            value += rhs;
             break;
         case BinaryOpExpr::Subtract:
-            value = lhs_->Evaluate(args) - rhs_->Evaluate(args);
+            value -= rhs;
             break;
         case BinaryOpExpr::Multiply:
-            value = lhs_->Evaluate(args) * rhs_->Evaluate(args);
+            value *= rhs;
             break;
         case BinaryOpExpr::Divide:
-            value = lhs_->Evaluate(args) / rhs_->Evaluate(args);
+            value /= rhs;
         }
         if (std::isfinite(value)) {
             return value;
