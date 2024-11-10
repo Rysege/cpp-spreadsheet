@@ -3,34 +3,40 @@
 #include "common.h"
 #include "formula.h"
 
-#include <functional>
 #include <unordered_set>
 
-class Sheet;
 
 class Cell : public CellInterface {
-public:
-    Cell(Sheet& sheet);
-    ~Cell();
-
-    void Set(std::string text);
-    void Clear();
-
-    Value GetValue() const override;
-    std::string GetText() const override;
-    std::vector<Position> GetReferencedCells() const override;
-
-    bool IsReferenced() const;
-
-private:
     class Impl;
     class EmptyImpl;
     class TextImpl;
     class FormulaImpl;
 
+public:
+    Cell(SheetInterface& sheet);
+    ~Cell();
+
+    void Set(std::string text);
+    void Clear();
+    bool IsReferenced() const;
+
+    Value GetValue() const override;
+    std::string GetText() const override;
+    std::vector<Position> GetReferencedCells() const override;
+
+private:
     std::unique_ptr<Impl> impl_;
+    SheetInterface& sheet_;
+    std::unordered_set<Cell*> exploited_; // содержит ячейки, которые ссылаются на ячейку
+    //std::unordered_set<Cell*> depended_;  // содержит ячейки, на которые ссылается ячейка
 
-    // Добавьте поля и методы для связи с таблицей, проверки циклических 
-    // зависимостей, графа зависимостей и т. д.
-
+    // очищает кэш у себя и у ячеек, которые ссылаются на эту ячейку
+    void ClearCache();
+    // ищет циклические ссылки, которые напрямую или косвенно ссылаются на самих себя
+    bool HasCyclicDependencies(Impl* impl);
+    // удаляет ссылку на себя у ячеек, на которые ссылалась
+    // если ячейка, на которую ссылалась, является пустой и на неё ни кто не ссылается, она удаляется
+    void DeleteDependencies();
+    // добавляет ссылки на себя у ячеек, на которые ссылается эта ячейка
+    void AddDependencies();
 };

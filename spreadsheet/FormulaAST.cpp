@@ -1,5 +1,4 @@
 #include "FormulaAST.h"
-
 #include "FormulaBaseListener.h"
 #include "FormulaLexer.h"
 #include "FormulaParser.h"
@@ -59,12 +58,12 @@ enum PrecedenceRule {
 // +(A * B) - always okay (the resulting binary op has the highest grammatic precedence)
 // +(A / B) - always okay (the resulting binary op has the highest grammatic precedence)
 constexpr PrecedenceRule PRECEDENCE_RULES[EP_END][EP_END] = {
-    /* EP_ADD */ {PR_NONE, PR_NONE, PR_NONE, PR_NONE, PR_NONE, PR_NONE},
-    /* EP_SUB */ {PR_RIGHT, PR_RIGHT, PR_NONE, PR_NONE, PR_NONE, PR_NONE},
-    /* EP_MUL */ {PR_BOTH, PR_BOTH, PR_NONE, PR_NONE, PR_NONE, PR_NONE},
-    /* EP_DIV */ {PR_BOTH, PR_BOTH, PR_RIGHT, PR_RIGHT, PR_NONE, PR_NONE},
-    /* EP_UNARY */ {PR_BOTH, PR_BOTH, PR_NONE, PR_NONE, PR_NONE, PR_NONE},
-    /* EP_ATOM */ {PR_NONE, PR_NONE, PR_NONE, PR_NONE, PR_NONE, PR_NONE},
+    /* EP_ADD */{ PR_NONE, PR_NONE, PR_NONE, PR_NONE, PR_NONE, PR_NONE },
+    /* EP_SUB */{ PR_RIGHT, PR_RIGHT, PR_NONE, PR_NONE, PR_NONE, PR_NONE },
+    /* EP_MUL */{ PR_BOTH, PR_BOTH, PR_NONE, PR_NONE, PR_NONE, PR_NONE },
+    /* EP_DIV */{ PR_BOTH, PR_BOTH, PR_RIGHT, PR_RIGHT, PR_NONE, PR_NONE },
+    /* EP_UNARY */{ PR_BOTH, PR_BOTH, PR_NONE, PR_NONE, PR_NONE, PR_NONE },
+    /* EP_ATOM */{ PR_NONE, PR_NONE, PR_NONE, PR_NONE, PR_NONE, PR_NONE },
 };
 
 class Expr {
@@ -72,13 +71,13 @@ public:
     virtual ~Expr() = default;
     virtual void Print(std::ostream& out) const = 0;
     virtual void DoPrintFormula(std::ostream& out, ExprPrecedence precedence) const = 0;
-    virtual double Evaluate(/*добавьте сюда нужные аргументы*/ args) const = 0;
+    virtual double Evaluate(const Getter& args) const = 0;
 
     // higher is tighter
     virtual ExprPrecedence GetPrecedence() const = 0;
 
     void PrintFormula(std::ostream& out, ExprPrecedence parent_precedence,
-                      bool right_child = false) const {
+        bool right_child = false) const {
         auto precedence = GetPrecedence();
         auto mask = right_child ? PR_RIGHT : PR_LEFT;
         bool parens_needed = PRECEDENCE_RULES[parent_precedence][precedence] & mask;
@@ -127,23 +126,42 @@ public:
 
     ExprPrecedence GetPrecedence() const override {
         switch (type_) {
-            case Add:
-                return EP_ADD;
-            case Subtract:
-                return EP_SUB;
-            case Multiply:
-                return EP_MUL;
-            case Divide:
-                return EP_DIV;
-            default:
-                // have to do this because VC++ has a buggy warning
-                assert(false);
-                return static_cast<ExprPrecedence>(INT_MAX);
+        case Add:
+            return EP_ADD;
+        case Subtract:
+            return EP_SUB;
+        case Multiply:
+            return EP_MUL;
+        case Divide:
+            return EP_DIV;
+        default:
+            // have to do this because VC++ has a buggy warning
+            assert(false);
+            return static_cast<ExprPrecedence>(INT_MAX);
         }
     }
 
-    double Evaluate(/*добавьте нужные аргументы*/) const override {
-			// Скопируйте ваше решение из предыдущих уроков.
+    double Evaluate(const Getter& args) const override {
+        double value{};
+        switch (type_) {
+        case BinaryOpExpr::Add:
+            value = lhs_->Evaluate(args) + rhs_->Evaluate(args);
+            break;
+        case BinaryOpExpr::Subtract:
+            value = lhs_->Evaluate(args) - rhs_->Evaluate(args);
+            break;
+        case BinaryOpExpr::Multiply:
+            value = lhs_->Evaluate(args) * rhs_->Evaluate(args);
+            break;
+        case BinaryOpExpr::Divide:
+            value = lhs_->Evaluate(args) / rhs_->Evaluate(args);
+        }
+        if (std::isfinite(value)) {
+            return value;
+        }
+        else {
+            throw FormulaError(FormulaError::Category::Arithmetic);
+        }
     }
 
 private:
@@ -180,8 +198,9 @@ public:
         return EP_UNARY;
     }
 
-    double Evaluate(/*добавьте нужные аргументы*/ args) const override {
-        // Скопируйте ваше решение из предыдущих уроков.
+    double Evaluate(const Getter& args) const override {
+        double value = operand_->Evaluate(args);
+        return type_ == Type::UnaryMinus ? -value : value;
     }
 
 private:
@@ -198,7 +217,8 @@ public:
     void Print(std::ostream& out) const override {
         if (!cell_->IsValid()) {
             out << FormulaError::Category::Ref;
-        } else {
+        }
+        else {
             out << cell_->ToString();
         }
     }
@@ -211,8 +231,8 @@ public:
         return EP_ATOM;
     }
 
-    double Evaluate(/*добавьте нужные аргументы*/ args) const override {
-        // реализуйте метод.
+    double Evaluate(const Getter& args) const override {
+        return args(*cell_);
     }
 
 private:
@@ -237,7 +257,7 @@ public:
         return EP_ATOM;
     }
 
-    double Evaluate(/*добавьте нужные аргументы*/ args) const override {
+    double Evaluate(const Getter&) const override {
         return value_;
     }
 
@@ -268,7 +288,8 @@ public:
         UnaryOpExpr::Type type;
         if (ctx->SUB()) {
             type = UnaryOpExpr::UnaryMinus;
-        } else {
+        }
+        else {
             assert(ctx->ADD() != nullptr);
             type = UnaryOpExpr::UnaryPlus;
         }
@@ -313,11 +334,14 @@ public:
         BinaryOpExpr::Type type;
         if (ctx->ADD()) {
             type = BinaryOpExpr::Add;
-        } else if (ctx->SUB()) {
+        }
+        else if (ctx->SUB()) {
             type = BinaryOpExpr::Subtract;
-        } else if (ctx->MUL()) {
+        }
+        else if (ctx->MUL()) {
             type = BinaryOpExpr::Multiply;
-        } else {
+        }
+        else {
             assert(ctx->DIV() != nullptr);
             type = BinaryOpExpr::Divide;
         }
@@ -338,9 +362,9 @@ private:
 class BailErrorListener : public antlr4::BaseErrorListener {
 public:
     void syntaxError(antlr4::Recognizer* /* recognizer */, antlr4::Token* /* offendingSymbol */,
-                     size_t /* line */, size_t /* charPositionInLine */, const std::string& msg,
-                     std::exception_ptr /* e */
-                     ) override {
+        size_t /* line */, size_t /* charPositionInLine */, const std::string& msg,
+        std::exception_ptr /* e */
+    ) override {
         throw ParsingError("Error when lexing: " + msg);
     }
 };
@@ -391,8 +415,8 @@ void FormulaAST::PrintFormula(std::ostream& out) const {
     root_expr_->PrintFormula(out, ASTImpl::EP_ATOM);
 }
 
-double FormulaAST::Execute(/*добавьте нужные аргументы*/ args) const {
-    return root_expr_->Evaluate(/*добавьте нужные аргументы*/ args);
+double FormulaAST::Execute(const Getter& args) const {
+    return root_expr_->Evaluate(args);
 }
 
 FormulaAST::FormulaAST(std::unique_ptr<ASTImpl::Expr> root_expr, std::forward_list<Position> cells)
